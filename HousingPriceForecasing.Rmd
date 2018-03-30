@@ -1,0 +1,158 @@
+---
+title: "Housing Price Forecasting"
+author: "Meina"
+date: "3/29/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Practice on Housing Price Forecasting
+
+This is an R Markdown document for housing price forecasing based on 3 cities (Hangzhou, Guangzhou,Shenzhen) for 5 years(2013-2017). 
+
+### install packages
+```{r tidy=TRUE}
+
+pkgs <- c("keras", "lime", "tidyquant", "rsample", "recipes", "yardstick", "corrr","lubridate","plyr","dplyr","stargazer","ggplot2")
+install.packages(pkgs)
+
+```
+### Load Library
+```{r tidy=TRUE}
+
+library(lubridate)
+library(plyr)
+library(dplyr)
+library(stargazer)
+library(ggplot2)
+library(keras)
+library(lime)
+library(tidyquant)
+library(rsample)
+library(recipes)
+library(yardstick)
+library(corrr)
+
+```
+### Load Library
+```{r tidy=TRUE}
+
+library(lubridate)
+library(plyr)
+library(dplyr)
+library(stargazer)
+library(ggplot2)
+library(keras)
+library(lime)
+library(tidyquant)
+library(rsample)
+library(recipes)
+library(yardstick)
+library(corrr)
+
+```
+### Work preparations
+```{r tidy=TRUE}
+
+#Clear Workspace firstly.
+rm(list=ls())
+
+#Set working directory
+setwd("/Users/meina/Google\ Drive/R/Housing/Housing")
+
+```
+### Read data and combine into 1 file and datatable
+```{r tidy=TRUE}
+
+#Read input data
+#For Guangzhou City
+dfGZ = read.csv("data/Guangzhou20180326.csv", header = TRUE)
+head(dfGZ)
+#For Hangzhou City
+dfHZ = read.csv("data/Hangzhou20180326.csv", header = TRUE)
+head(dfHZ)
+#For Shenzhen City
+dfSZ = read.csv("data/Shenzhen20180326.csv", header = TRUE)
+head(dfSZ)
+
+#Rename the colomn name to the same
+uColNames=colnames(dfGZ, do.NULL = TRUE, prefix = "row")
+
+colnames(dfHZ)=uColNames
+colnames(dfSZ)=uColNames
+
+#City Name
+dfGZ$City="GZ"
+dfHZ$City="HZ"
+dfSZ$City="SZ"
+
+#Remove the wrong first row
+dfSZ=dfSZ[-1,]
+
+#Put three data frames together
+totalMax = rbind(dfGZ,dfHZ,dfSZ)
+
+#Write back to spreadsheet
+write.csv(totalMax,"totalHData-Max.csv")
+
+```
+### Basic data prepration
+```{r tidy=TRUE}
+# Type conversion-From character to numeric
+as.numeric(totalMax$Unit.Price)
+as.numeric(totalMax$Built.Area)
+as.numeric(totalMax$Bedroom)
+as.numeric(totalMax$Living.room)
+
+#Translate Year+Month+Day
+postDate=as.character(totalMax$Post.Time)
+postDate=as.Date(postDate,"%Y %m %d")
+year=format(postDate,"%Y")
+month=format(postDate,"%m")
+day=format(postDate,"%d")
+
+#Add columns to appoint year, month and day
+totalMax = data.frame(Year=year,Month=month,Day=day,totalMax)
+
+#Sorted by  year, month, day descendlingly
+totalMax = arrange(totalMax,desc(Year),desc(Month),desc(Day))
+
+#Sorted by city descendlingly
+totalMax = arrange(totalMax,desc(totalMax$City))
+
+#Prune the data
+## removing unnecessary columns and rows;removing the NA row
+totalMax = totalMax %>% 
+  select(-Transaction.ID,-Community.Name,-Building.ID,-Building.Name,-Unit.ID,-Unit.Name,-Apr.ID,-Apr.Name,-Useful.Area,-Total.Cost,-备注)%>% 
+  drop_na(Unit.Price) %>% 
+  drop_na(Post.Time) 
+
+##Transform Chinese value
+totalMin = tbl_df(totalMax)
+totalMin = totalMin %>%
+  select(-Dealer,-Picture,-Built.Type,-Property,-Decoration,-Bathroom,-Built.Type,-Address,-Layer.Number,-Business.District,-Apr.Type,-Post.Time) %>%
+  drop_na(Data.Source) %>%
+  drop_na(Bedroom) %>%
+  mutate()
+  select(Unit.Price, everything())
+
+# Set built years
+# as.numeric(totalMin$Built.Year)
+# as.numeric(totalMin$Year)
+# totalMin$Built.Year = totalMin$Year-totalMin$Build.Year
+
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
