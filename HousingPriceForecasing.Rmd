@@ -16,7 +16,7 @@ This is an R Markdown document for housing price forecasing based on 3 cities (H
 ### install packages
 ```{r tidy=TRUE}
 
-pkgs <- c("keras", "lime", "tidyquant", "rsample", "recipes", "yardstick", "corrr","lubridate","plyr","dplyr","stargazer","ggplot2")
+pkgs <- c("keras", "lime", "tidyquant", "rsample", "recipes", "yardstick", "corrr","lubridate","plyr","dplyr","stargazer","ggplot2","knitr")
 install.packages(pkgs)
 
 ```
@@ -35,23 +35,7 @@ library(rsample)
 library(recipes)
 library(yardstick)
 library(corrr)
-
-```
-### Load Library
-```{r tidy=TRUE}
-
-library(lubridate)
-library(plyr)
-library(dplyr)
-library(stargazer)
-library(ggplot2)
-library(keras)
-library(lime)
-library(tidyquant)
-library(rsample)
-library(recipes)
-library(yardstick)
-library(corrr)
+library(knitr)
 
 ```
 ### Work preparations
@@ -64,18 +48,21 @@ rm(list=ls())
 setwd("/Users/meina/Google\ Drive/R/Housing/Housing")
 
 ```
-### Read data and combine into 1 file and datatable
+### Read data from 3 sepreate files, which represent 3 diffirent cties. And combine into 1 data frame named totalMax and write back to 1 file named totalData.csv.
 ```{r tidy=TRUE}
 
 #Read input data
 #For Guangzhou City
-dfGZ = read.csv("data/Guangzhou20180326.csv", header = TRUE)
+#dfGZ = read.csv("data/1/Guangzhou20180326.csv", header = TRUE )
+dfGZ = read.csv("data/2/Guangzhou-openRefine.csv",header = TRUE )
 head(dfGZ)
 #For Hangzhou City
-dfHZ = read.csv("data/Hangzhou20180326.csv", header = TRUE)
+#dfHZ = read.csv("data/1/Hangzhou20180326.csv", header = TRUE)
+dfHZ = read.csv("data/2/Hangzhou-openRefine.csv",header = TRUE )
 head(dfHZ)
 #For Shenzhen City
-dfSZ = read.csv("data/Shenzhen20180326.csv", header = TRUE)
+#dfSZ = read.csv("data/1/Shenzhen20180326.csv", header = TRUE)
+dfSZ = read.csv("data/2/Shenzhen-openRefine.csv",header = TRUE )
 head(dfSZ)
 
 #Rename the colomn name to the same
@@ -89,26 +76,25 @@ dfGZ$City="GZ"
 dfHZ$City="HZ"
 dfSZ$City="SZ"
 
-#Remove the wrong first row
+#Remove the wrong first row of Shenzhen City
 dfSZ=dfSZ[-1,]
 
 #Put three data frames together
 totalMax = rbind(dfGZ,dfHZ,dfSZ)
 
 #Write back to spreadsheet
-write.csv(totalMax,"totalHData-Max.csv")
+write.csv(totalMax,"totalData.csv")
 
 ```
 ### Basic data prepration
 ```{r tidy=TRUE}
-# Type conversion-From character to numeric
-as.numeric(totalMax$Unit.Price)
-as.numeric(totalMax$Built.Area)
-as.numeric(totalMax$Bedroom)
-as.numeric(totalMax$Living.room)
+
+#Rename the colomn name to the one easily remembered
+uColNames=colnames(totalMax, do.NULL = TRUE, prefix = "col")
+colnames(totalMax) = c("transacID","City","District","Region","commuID","commuName","buildingID","buildingName","unitID","unitName","aptID","aptName","Address","builtYear","layerType","layerNum","currentLayer","Orient","builtArea","usefulArea","aptType","Bedroom","Liveroom","Bathroom","totalCost","unitPrice","Property","Decoration","builtType","Addon","Dealer","businessDistrict","postTime","Picture","dataSource" )
 
 #Translate Year+Month+Day
-postDate=as.character(totalMax$Post.Time)
+postDate=as.character(totalMax$postTime)
 postDate=as.Date(postDate,"%Y %m %d")
 year=format(postDate,"%Y")
 month=format(postDate,"%m")
@@ -117,36 +103,242 @@ day=format(postDate,"%d")
 #Add columns to appoint year, month and day
 totalMax = data.frame(Year=year,Month=month,Day=day,totalMax)
 
-#Sorted by  year, month, day descendlingly
+#Sorted by  year, month, day descendingly
 totalMax = arrange(totalMax,desc(Year),desc(Month),desc(Day))
 
-#Sorted by city descendlingly
-totalMax = arrange(totalMax,desc(totalMax$City))
+#Sorted by city ascendingly
+totalMax = arrange(totalMax,totalMax$City)
 
-#Prune the data
-## removing unnecessary columns and rows;removing the NA row
+# Type conversion-From character to numeric
+as.numeric(totalMax$unitPrice)
+as.numeric(totalMax$builtArea)
+as.numeric(totalMax$totalCost)
+as.numeric(totalMax$Bedroom)
+as.numeric(totalMax$Liveroom)
+
+#Write back to spreadsheet for 2nd time. Date added;sorted by date and city.
+write.csv(totalMax,"totalData+Date.csv")
+
+```
+### Prune the data
+#### removing unnecessary columns and rows;removing the NA row
+```{r tidy=TRUE}
+
+### remove the meaningless fields and observations for totalMax
 totalMax = totalMax %>% 
-  select(-Transaction.ID,-Community.Name,-Building.ID,-Building.Name,-Unit.ID,-Unit.Name,-Apr.ID,-Apr.Name,-Useful.Area,-Total.Cost,-备注)%>% 
-  drop_na(Unit.Price) %>% 
-  drop_na(Post.Time) 
+  select(-transacID,-commuName,-buildingID,-buildingName,-unitID,-unitName,-aptID,-aptName,-usefulArea,-totalCost,-Addon) %>% 
+  filter( !is.na(unitPrice)) %>% 
+  filter( !is.na(builtArea))
 
-##Transform Chinese value
+### remove the sparse column for housing price foracsting
+### Builtyear column was built but not work for warning information of "'-' is not meaningful for factors".Need more attention to correct manipulation. 
 totalMin = tbl_df(totalMax)
 totalMin = totalMin %>%
-  select(-Dealer,-Picture,-Built.Type,-Property,-Decoration,-Bathroom,-Built.Type,-Address,-Layer.Number,-Business.District,-Apr.Type,-Post.Time) %>%
-  drop_na(Data.Source) %>%
-  drop_na(Bedroom) %>%
-  mutate()
-  select(Unit.Price, everything())
+  select(-Dealer,-Picture,-builtType,-Property,-Decoration,-Bathroom,-layerNum,-businessDistrict,-aptType,-postTime,-currentLayer,-Region,-commuID) %>%   #-Address,
+  filter( unitPrice > 1000 )
 
-# Set built years
-# as.numeric(totalMin$Built.Year)
-# as.numeric(totalMin$Year)
-# totalMin$Built.Year = totalMin$Year-totalMin$Build.Year
+## Write back to speadsheet, named validMax and validMin
+write.csv(totalMax,"validMax.csv")
+write.csv(totalMin,"validMin.csv")
+
+```
+### Deal with Chinese characters.
+There are 5 columns with Chinese character value, which are District+Region+Layer.Type+Orientation+Data.Source. We need to do the following things:
+1. Fillin the missed District value for Region group.
+2. Translate Layer.Type to English,which are High, Middle and Low.
+3. Translate Orientation to English abbreviation.
+4. Translate Data.Source to Chinese initial acronyms
+5. Transform Built.Area to 3 categories based on the information provided in National Bereau of Statistics of China (http://www.stats.gov.cn/tjsj/tjzd/gjtjzd/201701/t20170109_1451344.html). That is 3 built area categories, smaller than 90;between 90 and 144;bigger than 144.
+6. According to builtArea and totalCost to fillin the missing unitPrice
+
+```{r tidy=TRUE}
+# 1. From Region to make up the missing District.If we didn't do that,half data can't have District but only City. So it's not good for forecasting housing price based on District-oriented macro-economics.
+
+#Set a test data table named tempData to facilitate totalMin data processing.
+tempData=totalMin
+
+regionGZData = tempData %>% 
+  filter( City == "GZ" ) %>% 
+  group_by(District) %>% 
+#  group_by(Region) %>% 
+#  arrange(Region) %>% 
+  arrange(District)
+sum_GZData = regionGZData %>% 
+  summarize( count = n())
+View(regionGZData)
+View(sum_GZData)
+
+regionGZSYLData = regionGZData %>% 
+  ungroup(Region) %>% 
+  ungroup(District) %>% 
+  filter( Region=="三元里") %>% 
+  mutate( District = "GZ_YX") %>% 
+  mutate( Region = "GZ_YX_SYL")
+
+regionGZDSData = regionGZData %>%
+  ungroup(Region) %>% 
+  filter( Region=="东山") %>% 
+  mutate( District = "GZ_YX") %>% 
+  mutate( Region = "GZ_YX_DS")
+
+regionGZDSData = regionGZData %>%
+  ungroup(Region) %>% 
+  filter( Region=="东山") %>% 
+  mutate( District = "GZ_YX") %>% 
+  mutate( Region = "GZ_YX_DS")
+
+regionGZDCLData = regionGZData %>%
+  ungroup(Region) %>% 
+  filter( Region=="东川路") %>% 
+  mutate( District = "GZ_YX") %>% 
+  mutate( Region = "GZ_YX_DCL")
+
+regionGZDCLData = regionGZData %>%
+  ungroup(Region) %>% 
+  filter( Region=="东川路") %>% 
+  mutate( District = "GZ_YX") %>% 
+  mutate( Region = "GZ_YX_DCL")
+
+View(regionGZDCLData)
+  
+  
+  
+  summarize(count = n(),
+            mean = mean(Unit.Price, na.rm = TRUE), 
+            std_dev = sd(Unit.Price, na.rm = TRUE))
+summary_Price_temp
+kable(summary_Price_temp) 
 
 
 ```
 
+```{r tidy=TRUE}
+#2. Layer.Type
+tempData=tempData %>%  
+  mutate(layerType.High = as.numeric(Layer.Type=="高层")) %>% 
+  mutate(layerType.Mid = as.numeric(Layer.Type=="中层")) %>% 
+  mutate(layerType.Low = as.numeric(Layer.Type=="低层")) %>% 
+  select(-Layer.Type)
+```
+
+```{r tidy=TRUE}
+#3. Translate Orientation to English abbreviation.
+
+```
+
+```{r tidy=TRUE}
+
+#4. Translate Data.Source to Chinese initial acronyms
+
+tempData = totalMin
+as.character(tempData$dataSource)
+
+sourceData = tempData %>% 
+  group_by(dataSource) %>%
+  filter(unitPrice>1000) %>% 
+  filter( !is.na(dataSource)) %>%
+    ungroup(dataSource) %>%
+    filter(dataSource=="链家网" | dataSource=="\t链家网" ) %>% 
+    mutate(dataSource="LJ")
+  
+View(sourceData)
+
+sum_sourceData= sourceData %>% 
+    summarize( count = n())
+View(sum_sourceData)
+
+```
+
+```{r tidy=TRUE}
+#5. Transform Built.Area to 3 categories
+
+```
+sum_areaData=276359;sum_costData=274998;sum_unitPriceData=252703
+sum_areaData = tempData %>% 
+  filter( !is.na(builtArea) ) %>% 
+  summarize( count = n())
+View(sum_areaData)
+
+sum_costData = tempData %>% 
+  filter( !is.na(totalCost) ) %>% 
+  summarize( count = n())
+View(sum_costData)
+
+sum_unitPriceData = tempData %>% 
+  filter( !is.na(unitPrice) ) %>% 
+  summarize( count = n())
+View(sum_unitPriceData)
+```{r tidy=TRUE}
+#6. According to builtArea and totalCost to fillin the missing unitPrice
+
+
+
+tempData = totalMin
+
+tempData = tempData %>% 
+  drop.na(unitPrice)
+  filter( unitPrice>1000 )
+ 
+#Fillin the missing
+
+  filter(is)
+
+  arrange(District)
+sum_GZData = regionGZData %>% 
+  
+View(regionGZData)
+View(sum_GZData)
+
+```
+
+```{r tidy=TRUE}
+
+
+#2. Orientation
+
+
+tempData=tempData %>% 
+  select(-District,-Region,-Builtyears) %>% 
+  mutate(layerType.High = as.numeric(Layer.Type=="高层")) %>% 
+  mutate(layerType.Mid = as.numeric(Layer.Type=="中层")) %>% 
+  mutate(layerType.Low = as.numeric(Layer.Type=="低层")) %>% 
+  select(-Layer.Type)
+
+#3. Layer.Typer
+tempData=tempData %>%  
+  mutate(layerType.High = as.numeric(Layer.Type=="高层")) %>% 
+  mutate(layerType.Mid = as.numeric(Layer.Type=="中层")) %>% 
+  mutate(layerType.Low = as.numeric(Layer.Type=="低层")) %>% 
+  select(-Layer.Type)
+
+#5. Built.Area
+ tempData=tempData %>% 
+  mutate(builtArea.Small = as.numeric( Built.Area < 90 )) %>% 
+  mutate(builtArea.Big = as.numeric( Built.Area > 144 )) %>% 
+  mutate(builtArea.Mid = as.numeric(!is.na(Built.Area)))  
+View(tempData)
+# %>% 
+#  select(-Built.Area)
+
+#Summary
+summary_source_temp = tempData %>% 
+  group_by(Data.Source) %>% 
+  summarize(mean = mean(Unit.Price, na.rm = TRUE), 
+            std_dev = sd(Unit.Price, na.rm = TRUE))
+kable(summary_source_temp)
+summary_source_temp = tempData %>% 
+  group_by(City) %>% 
+  summarize(mean = mean(Unit.Price, na.rm = TRUE), 
+            std_dev = sd(Unit.Price, na.rm = TRUE))
+kable(summary_source_temp)
+
+summary_source_temp = tempData %>% 
+  group_by(City, Data.Source) %>% 
+  summarize(count = n())
+summary_source_temp
+
+
+```
 ## Including Plots
 
 You can also embed plots, for example:
